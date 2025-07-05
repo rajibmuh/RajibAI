@@ -1,266 +1,257 @@
-// RAJIB AI Chatbot Script - Fixed Version
-class RajibAI {
+// Simple RAJIB AI Chatbot - Enhanced Connection
+class SimpleRajibAI {
     constructor() {
-        this.apiKey = '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';
-        this.apiUrl = 'https://openrouter.ai/api/v1/chat/completions';
-        this.currentChatId = null;
-        this.chats = new Map();
-        this.chatHistory = [];
-        this.retryCount = 0;
-        this.maxRetries = 3;
+        // Multiple API configurations for better reliability
+        this.apiConfigs = [
+            {
+                name: 'OpenRouter',
+                apiKey: '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',
+                apiUrl: 'https://openrouter.ai/api/v1/chat/completions',
+                model: 'mistralai/mistral-7b-instruct'
+            },
+            {
+                name: 'OpenRouter-Alt',
+                apiKey: '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',
+                apiUrl: 'https://openrouter.ai/api/v1/chat/completions',
+                model: 'microsoft/dialoGPT-medium'
+            }
+        ];
         
-        this.initializeElements();
-        this.setupEventListeners();
-        this.loadChatHistory();
-        this.createNewChat();
+        this.currentApiIndex = 0;
+        this.messages = [];
+        this.isLoading = false;
+        this.connectionStatus = 'testing';
+        
+        this.init();
     }
 
-    initializeElements() {
+    init() {
         this.chatContainer = document.getElementById('chatContainer');
         this.messageInput = document.getElementById('messageInput');
         this.sendBtn = document.getElementById('sendBtn');
-        this.historyList = document.getElementById('historyList');
-        this.newChatBtn = document.getElementById('newChatBtn');
-        this.sidebar = document.getElementById('sidebar');
-        this.mobileMenuBtn = document.getElementById('mobileMenuBtn');
-        this.loadingIndicator = document.getElementById('loadingIndicator');
+        
+        this.setupEventListeners();
+        this.showWelcomeMessage();
+        
+        // Test APIs with delay to avoid rate limiting
+        setTimeout(() => this.testAllAPIs(), 1000);
     }
 
     setupEventListeners() {
-        // Send button click
-        this.sendBtn.addEventListener('click', () => this.sendMessage());
+        this.sendBtn?.addEventListener('click', () => this.sendMessage());
         
-        // Enter key press
-        this.messageInput.addEventListener('keypress', (e) => {
+        this.messageInput?.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 this.sendMessage();
             }
         });
-
-        // Auto-resize textarea
-        this.messageInput.addEventListener('input', () => {
-            this.messageInput.style.height = 'auto';
-            this.messageInput.style.height = Math.min(this.messageInput.scrollHeight, 120) + 'px';
-        });
-
-        // New chat button
-        this.newChatBtn.addEventListener('click', () => this.createNewChat());
-
-        // Mobile menu toggle
-        if (this.mobileMenuBtn) {
-            this.mobileMenuBtn.addEventListener('click', () => this.toggleMobileMenu());
-        }
-
-        // Close mobile menu when clicking outside
-        document.addEventListener('click', (e) => {
-            if (window.innerWidth <= 768 && 
-                this.sidebar && !this.sidebar.contains(e.target) && 
-                this.mobileMenuBtn && !this.mobileMenuBtn.contains(e.target)) {
-                this.sidebar.classList.remove('open');
-            }
-        });
-
-        // Handle window resize
-        window.addEventListener('resize', () => {
-            if (window.innerWidth > 768 && this.sidebar) {
-                this.sidebar.classList.remove('open');
-            }
-        });
-    }
-
-    toggleMobileMenu() {
-        if (this.sidebar) {
-            this.sidebar.classList.toggle('open');
-        }
-    }
-
-    generateChatId() {
-        return 'chat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-    }
-
-    createNewChat() {
-        const chatId = this.generateChatId();
-        const chatTitle = `Chat ${this.chatHistory.length + 1}`;
-        
-        this.currentChatId = chatId;
-        this.chats.set(chatId, {
-            id: chatId,
-            title: chatTitle,
-            messages: [],
-            createdAt: new Date().toISOString()
-        });
-
-        this.clearChatContainer();
-        this.showWelcomeMessage();
-        this.updateChatHistory();
-        if (this.messageInput) {
-            this.messageInput.focus();
-        }
-    }
-
-    clearChatContainer() {
-        if (this.chatContainer) {
-            this.chatContainer.innerHTML = '';
-        }
     }
 
     showWelcomeMessage() {
         const welcomeHTML = `
-            <div class="welcome-message">
-                <div class="bot-avatar">
+            <div class="message bot">
+                <div class="message-avatar">
                     <i class="fas fa-robot"></i>
                 </div>
-                <div class="welcome-text">
-                    <h2>Selamat datang di RAJIB AI!</h2>
-                    <p>Saya adalah asisten AI yang siap membantu Anda. Silakan ajukan pertanyaan atau mulai percakapan.</p>
+                <div class="message-content">
+                    <h3>🤖 Selamat datang di RAJIB AI!</h3>
+                    <p>Saya siap membantu Anda. Silakan ajukan pertanyaan!</p>
+                    <div id="apiStatus" class="api-status">
+                        <span>🔄 Menguji koneksi API...</span>
+                    </div>
+                    <div id="connectionDetails" class="connection-details">
+                        <small>Mengecek ${this.apiConfigs.length} konfigurasi API...</small>
+                    </div>
                 </div>
             </div>
         `;
-        if (this.chatContainer) {
-            this.chatContainer.innerHTML = welcomeHTML;
+        this.chatContainer.innerHTML = welcomeHTML;
+    }
+
+    updateAPIStatus(status, message, details = '') {
+        const statusEl = document.getElementById('apiStatus');
+        const detailsEl = document.getElementById('connectionDetails');
+        
+        if (statusEl) {
+            const icon = status === 'success' ? '✅' : status === 'error' ? '❌' : '🔄';
+            statusEl.innerHTML = `<span>${icon} ${message}</span>`;
         }
+        
+        if (detailsEl && details) {
+            detailsEl.innerHTML = `<small>${details}</small>`;
+        }
+    }
+
+    async testAllAPIs() {
+        console.log('🔍 Testing all API configurations...');
+        
+        for (let i = 0; i < this.apiConfigs.length; i++) {
+            const config = this.apiConfigs[i];
+            
+            try {
+                this.updateAPIStatus('testing', `Menguji ${config.name}...`, 
+                    `Konfigurasi ${i + 1}/${this.apiConfigs.length}`);
+                
+                console.log(`Testing ${config.name} with model ${config.model}`);
+                
+                const testMessage = [{ role: 'user', content: 'Hi' }];
+                await this.callAPI(testMessage, config);
+                
+                this.currentApiIndex = i;
+                this.connectionStatus = 'connected';
+                this.updateAPIStatus('success', `${config.name} siap digunakan!`, 
+                    `Model: ${config.model}`);
+                
+                console.log(`✅ ${config.name} connected successfully`);
+                return;
+                
+            } catch (error) {
+                console.log(`❌ ${config.name} failed:`, error.message);
+                
+                // Wait before trying next API
+                if (i < this.apiConfigs.length - 1) {
+                    await this.sleep(2000);
+                }
+            }
+        }
+        
+        // If all APIs failed
+        this.connectionStatus = 'failed';
+        this.updateAPIStatus('error', 'Semua API tidak dapat terhubung', 
+            'Coba refresh halaman atau hubungi administrator');
+        console.log('❌ All API configurations failed');
     }
 
     async sendMessage() {
-        const message = this.messageInput ? this.messageInput.value.trim() : '';
-        if (!message) return;
+        const message = this.messageInput?.value.trim();
+        if (!message || this.isLoading) return;
 
-        if (!this.currentChatId) {
-            this.createNewChat();
+        if (this.connectionStatus !== 'connected') {
+            this.addMessage('bot', '❌ API belum terhubung. Silakan tunggu atau refresh halaman.');
+            return;
         }
 
-        // Disable input during processing
-        this.setInputState(false);
-        this.showLoading(true);
-
-        // Add user message to chat
+        // Add user message
         this.addMessage('user', message);
-        if (this.messageInput) {
-            this.messageInput.value = '';
-            this.messageInput.style.height = 'auto';
-        }
-
-        // Save message to current chat
-        const currentChat = this.chats.get(this.currentChatId);
-        if (currentChat) {
-            currentChat.messages.push({
-                role: 'user',
-                content: message,
-                timestamp: new Date().toISOString()
-            });
-
-            // Update chat title if it's the first message
-            if (currentChat.messages.length === 1) {
-                currentChat.title = this.generateChatTitle(message);
-                this.updateChatHistory();
+        this.messageInput.value = '';
+        
+        // Show loading
+        this.setLoading(true);
+        
+        try {
+            // Prepare messages for API
+            const apiMessages = [
+                {
+                    role: 'system',
+                    content: 'Anda adalah RAJIB AI, asisten AI yang membantu dan ramah. Jawablah dalam bahasa Indonesia dengan informatif dan sopan.'
+                },
+                ...this.messages,
+                { role: 'user', content: message }
+            ];
+            
+            // Try current API first, then fallback to others
+            const response = await this.callAPIWithFallback(apiMessages);
+            
+            // Add bot response
+            this.addMessage('bot', response);
+            
+            // Update message history
+            this.messages.push(
+                { role: 'user', content: message },
+                { role: 'assistant', content: response }
+            );
+            
+            // Keep only last 10 messages to prevent token limit
+            if (this.messages.length > 10) {
+                this.messages = this.messages.slice(-10);
             }
-
-            try {
-                // Get AI response with retry logic
-                const aiResponse = await this.getAIResponseWithRetry(currentChat.messages);
-                
-                // Add AI response to chat
-                this.addMessage('bot', aiResponse);
-                
-                // Save AI response to current chat
-                currentChat.messages.push({
-                    role: 'assistant',
-                    content: aiResponse,
-                    timestamp: new Date().toISOString()
-                });
-
-                // Save to history
-                this.saveChatHistory();
-                this.retryCount = 0; // Reset retry count on success
-
-            } catch (error) {
-                console.error('Error getting AI response:', error);
-                this.addMessage('bot', 'Maaf, terjadi kesalahan saat menghubungi AI. Silakan coba lagi dalam beberapa saat.');
-            } finally {
-                this.setInputState(true);
-                this.showLoading(false);
-                this.scrollToBottom();
-            }
+            
+        } catch (error) {
+            console.error('Error:', error);
+            this.addMessage('bot', this.getErrorMessage(error));
+        } finally {
+            this.setLoading(false);
         }
     }
 
-    generateChatTitle(message) {
-        const maxLength = 30;
-        if (message.length <= maxLength) {
-            return message;
-        }
-        return message.substring(0, maxLength) + '...';
-    }
-
-    async getAIResponseWithRetry(messages) {
-        for (let i = 0; i < this.maxRetries; i++) {
+    async callAPIWithFallback(messages) {
+        let lastError = null;
+        
+        // Try each API configuration
+        for (let i = 0; i < this.apiConfigs.length; i++) {
+            const configIndex = (this.currentApiIndex + i) % this.apiConfigs.length;
+            const config = this.apiConfigs[configIndex];
+            
             try {
-                return await this.getAIResponse(messages);
-            } catch (error) {
-                console.error(`Attempt ${i + 1} failed:`, error);
-                if (i === this.maxRetries - 1) {
-                    throw error;
+                console.log(`Trying ${config.name}...`);
+                const response = await this.callAPI(messages, config);
+                
+                // Update current API index if different
+                if (configIndex !== this.currentApiIndex) {
+                    this.currentApiIndex = configIndex;
+                    console.log(`Switched to ${config.name}`);
                 }
-                // Wait before retry with exponential backoff
-                await this.sleep(1000 * Math.pow(2, i));
+                
+                return response;
+                
+            } catch (error) {
+                lastError = error;
+                console.log(`${config.name} failed:`, error.message);
+                
+                if (i < this.apiConfigs.length - 1) {
+                    await this.sleep(1000);
+                }
             }
         }
+        
+        throw lastError || new Error('All APIs failed');
     }
 
-    async getAIResponse(messages) {
-        // Prepare messages array properly
-        const formattedMessages = [
-            {
-                role: 'system',
-                content: 'Anda adalah RAJIB AI, asisten AI yang membantu dan ramah. Jawablah pertanyaan dengan informatif dan sopan dalam bahasa Indonesia.'
-            }
-        ];
-
-        // Add user messages with proper formatting
-        messages.forEach(msg => {
-            if (msg && msg.role && msg.content) {
-                formattedMessages.push({
-                    role: msg.role === 'user' ? 'user' : 'assistant',
-                    content: String(msg.content).trim()
-                });
-            }
-        });
-
-        // Prepare request body
+    async callAPI(messages, config = null) {
+        const apiConfig = config || this.apiConfigs[this.currentApiIndex];
+        
         const requestBody = {
-            model: 'mistralai/mistral-7b-instruct',
-            messages: formattedMessages,
-            max_tokens: 1000,
+            model: apiConfig.model,
+            messages: messages,
+            max_tokens: 800,
             temperature: 0.7,
             stream: false
         };
 
-        const response = await fetch(this.apiUrl, {
+        // Enhanced headers for better compatibility
+        const headers = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiConfig.apiKey}`,
+            'Accept': 'application/json'
+        };
+
+        // Add additional headers based on environment
+        if (window.location.origin && !window.location.hostname.includes('localhost')) {
+            headers['Origin'] = window.location.origin;
+            headers['Referer'] = window.location.href;
+        }
+
+        const response = await fetch(apiConfig.apiUrl, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${this.apiKey}`,
-                'HTTP-Referer': window.location.origin || 'https://rajib-ai.com',
-                'X-Title': 'RAJIB AI'
-            },
-            body: JSON.stringify(requestBody)
+            headers: headers,
+            body: JSON.stringify(requestBody),
+            mode: 'cors',
+            credentials: 'omit'
         });
 
         if (!response.ok) {
             const errorText = await response.text();
-            console.error('API Error:', response.status, errorText);
-            throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+            throw new Error(`${response.status}: ${errorText}`);
         }
 
         const data = await response.json();
         
-        // Validate response structure
-        if (!data || !data.choices || !data.choices[0] || !data.choices[0].message) {
-            throw new Error('Invalid response structure from API');
+        if (!data?.choices?.[0]?.message?.content) {
+            throw new Error('Invalid API response format');
         }
 
-        return data.choices[0].message.content || 'Maaf, tidak ada respons dari AI.';
+        return data.choices[0].message.content;
     }
 
     sleep(ms) {
@@ -268,351 +259,236 @@ class RajibAI {
     }
 
     addMessage(type, content) {
-        if (!this.chatContainer) return;
-
-        const messageElement = document.createElement('div');
-        messageElement.className = `message ${type}`;
+        const messageEl = document.createElement('div');
+        messageEl.className = `message ${type}`;
         
         const avatarIcon = type === 'user' ? 'fas fa-user' : 'fas fa-robot';
+        const formattedContent = this.formatMessage(content);
         
-        messageElement.innerHTML = `
+        messageEl.innerHTML = `
             <div class="message-avatar">
                 <i class="${avatarIcon}"></i>
             </div>
             <div class="message-content">
-                ${this.formatMessage(content)}
+                ${formattedContent}
             </div>
         `;
 
-        // Remove welcome message if it exists
-        const welcomeMessage = this.chatContainer.querySelector('.welcome-message');
-        if (welcomeMessage) {
-            welcomeMessage.remove();
-        }
-
-        this.chatContainer.appendChild(messageElement);
+        this.chatContainer.appendChild(messageEl);
         this.scrollToBottom();
     }
 
     formatMessage(content) {
-        if (!content) return '';
-        
-        // Basic markdown-like formatting with safety checks
         return String(content)
             .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
             .replace(/\*(.*?)\*/g, '<em>$1</em>')
             .replace(/\n/g, '<br>');
     }
 
-    setInputState(enabled) {
-        if (this.messageInput) {
-            this.messageInput.disabled = !enabled;
-        }
+    setLoading(loading) {
+        this.isLoading = loading;
+        
         if (this.sendBtn) {
-            this.sendBtn.disabled = !enabled;
+            this.sendBtn.disabled = loading;
+            this.sendBtn.textContent = loading ? '⏳' : '📤';
         }
         
-        if (enabled && this.messageInput) {
-            this.messageInput.focus();
+        if (this.messageInput) {
+            this.messageInput.disabled = loading;
+        }
+        
+        if (loading) {
+            this.addLoadingMessage();
+        } else {
+            this.removeLoadingMessage();
         }
     }
 
-    showLoading(show) {
-        if (this.loadingIndicator) {
-            if (show) {
-                this.loadingIndicator.classList.add('show');
-            } else {
-                this.loadingIndicator.classList.remove('show');
-            }
+    addLoadingMessage() {
+        const loadingEl = document.createElement('div');
+        loadingEl.className = 'message bot loading-message';
+        loadingEl.innerHTML = `
+            <div class="message-avatar">
+                <i class="fas fa-robot"></i>
+            </div>
+            <div class="message-content">
+                <div class="typing-indicator">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+        `;
+        
+        this.chatContainer.appendChild(loadingEl);
+        this.scrollToBottom();
+    }
+
+    removeLoadingMessage() {
+        const loadingMsg = this.chatContainer.querySelector('.loading-message');
+        if (loadingMsg) {
+            loadingMsg.remove();
         }
     }
 
     scrollToBottom() {
         setTimeout(() => {
-            if (this.chatContainer) {
-                this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
-            }
+            this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
         }, 100);
     }
 
-    updateChatHistory() {
-        this.chatHistory = Array.from(this.chats.values()).sort((a, b) => 
-            new Date(b.createdAt) - new Date(a.createdAt)
-        );
-        this.renderChatHistory();
-    }
-
-    renderChatHistory() {
-        if (!this.historyList) return;
-
-        this.historyList.innerHTML = '';
-        
-        if (this.chatHistory.length === 0) {
-            this.historyList.innerHTML = '<div class="no-history">Belum ada riwayat chat</div>';
-            return;
-        }
-
-        this.chatHistory.forEach(chat => {
-            const historyItem = document.createElement('div');
-            historyItem.className = 'history-item';
-            historyItem.textContent = chat.title || 'Untitled Chat';
-            
-            if (chat.id === this.currentChatId) {
-                historyItem.classList.add('active');
-            }
-            
-            historyItem.addEventListener('click', () => this.loadChat(chat.id));
-            this.historyList.appendChild(historyItem);
-        });
-    }
-
-    loadChat(chatId) {
-        const chat = this.chats.get(chatId);
-        if (!chat) return;
-
-        this.currentChatId = chatId;
-        this.clearChatContainer();
-        
-        if (chat.messages.length === 0) {
-            this.showWelcomeMessage();
+    getErrorMessage(error) {
+        if (error.message.includes('401')) {
+            return '❌ Kunci API tidak valid. Silakan hubungi administrator.';
+        } else if (error.message.includes('429')) {
+            return '⏳ Terlalu banyak permintaan. Silakan tunggu sebentar dan coba lagi.';
+        } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+            return '🌐 Tidak dapat terhubung ke server. Kemungkinan:\n- Koneksi internet bermasalah\n- Firewall memblokir akses\n- Server hosting membatasi koneksi keluar';
+        } else if (error.message.includes('500')) {
+            return '🔧 Server API bermasalah. Silakan coba lagi nanti.';
+        } else if (error.message.includes('CORS')) {
+            return '🔒 Masalah CORS. Hosting tidak mendukung koneksi ke API eksternal.';
         } else {
-            chat.messages.forEach(msg => {
-                if (msg && msg.role && msg.content) {
-                    this.addMessage(msg.role === 'user' ? 'user' : 'bot', msg.content);
-                }
-            });
-        }
-        
-        this.updateChatHistory();
-        this.scrollToBottom();
-        
-        // Close mobile menu after selecting chat
-        if (window.innerWidth <= 768 && this.sidebar) {
-            this.sidebar.classList.remove('open');
+            return `❌ Error: ${error.message}`;
         }
     }
 
-    // Storage methods with better error handling
-    saveChatHistory() {
-        try {
-            const chatData = {};
-            this.chats.forEach((chat, id) => {
-                chatData[id] = {
-                    id: chat.id,
-                    title: chat.title,
-                    messages: chat.messages || [],
-                    createdAt: chat.createdAt
-                };
-            });
-            
-            // Use in-memory storage for artifacts environment
-            this.persistentData = chatData;
-            
-            // Try to use sessionStorage if available
-            if (typeof Storage !== 'undefined') {
-                try {
-                    sessionStorage.setItem('rajib_ai_chats', JSON.stringify(chatData));
-                } catch (e) {
-                    console.log('SessionStorage not available, using in-memory storage');
-                }
-            }
-        } catch (error) {
-            console.error('Error saving chat history:', error);
+    // Public methods for debugging and manual control
+    async retryConnection() {
+        this.connectionStatus = 'testing';
+        this.showWelcomeMessage();
+        await this.testAllAPIs();
+    }
+
+    clearChat() {
+        this.messages = [];
+        this.showWelcomeMessage();
+        if (this.connectionStatus !== 'connected') {
+            this.testAllAPIs();
         }
     }
 
-    loadChatHistory() {
-        try {
-            let chatData = null;
-            
-            // Try to load from sessionStorage first
-            if (typeof Storage !== 'undefined') {
-                try {
-                    const savedChats = sessionStorage.getItem('rajib_ai_chats');
-                    if (savedChats) {
-                        chatData = JSON.parse(savedChats);
-                    }
-                } catch (e) {
-                    console.log('SessionStorage not available');
-                }
-            }
-            
-            // Fallback to in-memory storage
-            if (!chatData && this.persistentData) {
-                chatData = this.persistentData;
-            }
-            
-            if (chatData) {
-                this.chats.clear();
-                
-                Object.entries(chatData).forEach(([id, chat]) => {
-                    if (chat && chat.id) {
-                        this.chats.set(id, {
-                            id: chat.id,
-                            title: chat.title || 'Untitled Chat',
-                            messages: chat.messages || [],
-                            createdAt: chat.createdAt || new Date().toISOString()
-                        });
-                    }
-                });
-                
-                this.updateChatHistory();
-            }
-        } catch (error) {
-            console.error('Error loading chat history:', error);
-        }
-    }
-
-    // Method to delete a chat
-    deleteChat(chatId) {
-        if (this.chats.has(chatId)) {
-            this.chats.delete(chatId);
-            
-            // If deleting current chat, create a new one
-            if (this.currentChatId === chatId) {
-                this.createNewChat();
-            }
-            
-            this.updateChatHistory();
-            this.saveChatHistory();
-        }
-    }
-
-    // Method to clear all chats
-    clearAllChats() {
-        this.chats.clear();
-        this.createNewChat();
-        this.saveChatHistory();
-    }
-
-    // Method to export chat history
-    exportChatHistory() {
-        try {
-            const exportData = {
-                timestamp: new Date().toISOString(),
-                chats: Array.from(this.chats.values())
-            };
-            
-            const blob = new Blob([JSON.stringify(exportData, null, 2)], {
-                type: 'application/json'
-            });
-            
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `rajib_ai_chat_history_${new Date().toISOString().split('T')[0]}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        } catch (error) {
-            console.error('Error exporting chat history:', error);
-        }
-    }
-
-    // Method to import chat history
-    importChatHistory(file) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            try {
-                const importData = JSON.parse(e.target.result);
-                if (importData.chats && Array.isArray(importData.chats)) {
-                    importData.chats.forEach(chat => {
-                        if (chat && chat.id) {
-                            this.chats.set(chat.id, chat);
-                        }
-                    });
-                    this.updateChatHistory();
-                    this.saveChatHistory();
-                    console.log('Chat history imported successfully');
-                }
-            } catch (error) {
-                console.error('Error importing chat history:', error);
-                alert('Error importing chat history. Please check the file format.');
-            }
-        };
-        reader.readAsText(file);
-    }
-
-    // Method to get chat statistics
-    getChatStats() {
-        const totalChats = this.chats.size;
-        let totalMessages = 0;
-        let totalUserMessages = 0;
-        let totalBotMessages = 0;
-        
-        this.chats.forEach(chat => {
-            if (chat.messages) {
-                totalMessages += chat.messages.length;
-                chat.messages.forEach(msg => {
-                    if (msg.role === 'user') {
-                        totalUserMessages++;
-                    } else if (msg.role === 'assistant') {
-                        totalBotMessages++;
-                    }
-                });
-            }
-        });
-        
+    getStatus() {
         return {
-            totalChats,
-            totalMessages,
-            totalUserMessages,
-            totalBotMessages
+            connectionStatus: this.connectionStatus,
+            currentAPI: this.apiConfigs[this.currentApiIndex]?.name,
+            currentModel: this.apiConfigs[this.currentApiIndex]?.model,
+            isLoading: this.isLoading,
+            messageCount: this.messages.length,
+            availableAPIs: this.apiConfigs.map(c => c.name)
         };
+    }
+
+    // Force switch to next API
+    switchAPI() {
+        this.currentApiIndex = (this.currentApiIndex + 1) % this.apiConfigs.length;
+        const newConfig = this.apiConfigs[this.currentApiIndex];
+        console.log(`Switched to ${newConfig.name} (${newConfig.model})`);
+        this.addMessage('bot', `🔄 Beralih ke ${newConfig.name} dengan model ${newConfig.model}`);
     }
 }
 
-// Initialize the chatbot when the page loads
+// Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     try {
-        window.rajibAI = new RajibAI();
-        console.log('RAJIB AI initialized successfully');
-    } catch (error) {
-        console.error('Error initializing RAJIB AI:', error);
-    }
-});
-
-// Add keyboard shortcuts
-document.addEventListener('keydown', (e) => {
-    try {
-        // Ctrl/Cmd + N for new chat
-        if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
-            e.preventDefault();
-            if (window.rajibAI) {
-                window.rajibAI.createNewChat();
-            }
-        }
+        window.rajibAI = new SimpleRajibAI();
+        console.log('🚀 Enhanced RAJIB AI initialized');
         
-        // Ctrl/Cmd + / to focus on input
-        if ((e.ctrlKey || e.metaKey) && e.key === '/') {
-            e.preventDefault();
-            if (window.rajibAI && window.rajibAI.messageInput) {
-                window.rajibAI.messageInput.focus();
-            }
-        }
+        // Enhanced debug commands
+        window.rajibDebug = {
+            status: () => window.rajibAI.getStatus(),
+            clear: () => window.rajibAI.clearChat(),
+            retry: () => window.rajibAI.retryConnection(),
+            switch: () => window.rajibAI.switchAPI(),
+            test: () => window.rajibAI.testAllAPIs()
+        };
+        
+        console.log('Debug commands available:');
+        console.log('- rajibDebug.status() - Check status');
+        console.log('- rajibDebug.clear() - Clear chat');
+        console.log('- rajibDebug.retry() - Retry connection');
+        console.log('- rajibDebug.switch() - Switch API');
+        console.log('- rajibDebug.test() - Test all APIs');
+        
     } catch (error) {
-        console.error('Error handling keyboard shortcut:', error);
+        console.error('❌ Initialization error:', error);
+        
+        // Show error in UI
+        const chatContainer = document.getElementById('chatContainer');
+        if (chatContainer) {
+            chatContainer.innerHTML = `
+                <div class="message bot">
+                    <div class="message-avatar">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <div class="message-content">
+                        <h3>❌ Error Inisialisasi</h3>
+                        <p>Terjadi kesalahan saat memuat aplikasi.</p>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                        <button onclick="location.reload()" style="margin-top: 10px; padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            🔄 Refresh Halaman
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
     }
 });
 
-// Add touch support for mobile devices
-if ('ontouchstart' in window) {
-    document.addEventListener('touchstart', () => {
-        // Enable touch interaction
-    });
-}
-
-// Service Worker registration (if needed for offline functionality)
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        // Uncomment if you have a service worker
-        // navigator.serviceWorker.register('/sw.js')
-        //     .then((registration) => {
-        //         console.log('SW registered: ', registration);
-        //     })
-        //     .catch((registrationError) => {
-        //         console.log('SW registration failed: ', registrationError);
-        //     });
-    });
-}
+// Enhanced CSS for better visual feedback
+const style = document.createElement('style');
+style.textContent = `
+    .typing-indicator {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 10px 0;
+    }
+    
+    .typing-indicator span {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: #666;
+        animation: typing 1.4s infinite ease-in-out;
+    }
+    
+    .typing-indicator span:nth-child(1) { animation-delay: 0s; }
+    .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+    .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+    
+    @keyframes typing {
+        0%, 60%, 100% { transform: scale(1); opacity: 0.5; }
+        30% { transform: scale(1.2); opacity: 1; }
+    }
+    
+    .api-status {
+        margin-top: 10px;
+        padding: 8px 12px;
+        background-color: #f8f9fa;
+        border-radius: 6px;
+        font-size: 0.9em;
+        border-left: 4px solid #007bff;
+    }
+    
+    .connection-details {
+        margin-top: 5px;
+        color: #666;
+        font-size: 0.8em;
+    }
+    
+    .loading-message {
+        opacity: 0.7;
+    }
+    
+    .message-content h3 {
+        margin: 0 0 10px 0;
+        color: #333;
+    }
+    
+    .message-content p {
+        margin: 5px 0;
+        line-height: 1.4;
+    }
+`;
+document.head.appendChild(style);
