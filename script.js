@@ -5,14 +5,14 @@ class SimpleRajibAI {
         this.apiConfigs = [
             {
                 name: 'OpenRouter',
-                apiKey: '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',
-                apiUrl: 'https://openrouter.ai/api/v1/chat/completions',
+                apiKey: "",
+                apiUrl: "/api/chat",
                 model: 'mistralai/mistral-7b-instruct'
             },
             {
                 name: 'OpenRouter-Alt',
-                apiKey: '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',
-                apiUrl: 'https://openrouter.ai/api/v1/chat/completions',
+                apiKey: "",
+                apiUrl: "/api/chat",
                 model: 'microsoft/dialoGPT-medium'
             }
         ];
@@ -221,10 +221,10 @@ class SimpleRajibAI {
 
         // Enhanced headers for better compatibility
         const headers = {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiConfig.apiKey}`,
-            'Accept': 'application/json'
-        };
+  "Content-Type": "application/json",
+  Accept: "application/json",
+};
+
 
         // Add additional headers based on environment
         if (window.location.origin && !window.location.hostname.includes('localhost')) {
