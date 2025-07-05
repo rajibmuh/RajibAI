@@ -4,7 +4,7 @@ export default async function handler(req, res) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.OPENROUTER_KEY}`,
+        Authorization: `Bearer ${process.env.RAJIB_API_KEY}`,
       },
       body: JSON.stringify({
         model: req.body.model || "mistralai/mistral-7b-instruct",
